@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindMap - Create Beautiful Mind Maps</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="auth-screen">
+        <div class="auth-container">
+            <div class="auth-header">
+                <i class="fas fa-brain"></i>
+                <h1>MindMap</h1>
+                <p>Create beautiful mind maps</p>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Login</button>
+                <button class="auth-tab" data-tab="register">Register</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="login-form" class="auth-form active">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" required>
+                </div>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" class="auth-form">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" required>
+                </div>
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-user-plus"></i> Register
+                </button>
+            </form>
+
+            <div id="auth-error" class="auth-error"></div>
+        </div>
+    </div>
+
+    <!-- Dashboard Screen -->
+    <div id="dashboard-screen" class="dashboard-screen">
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <i class="fas fa-brain"></i>
+                <span>MindMap</span>
+            </div>
+            <div class="navbar-menu">
+                <button id="nav-dashboard" class="nav-btn active">
+                    <i class="fas fa-th-large"></i> Dashboard
+                </button>
+                <button id="nav-new" class="nav-btn">
+                    <i class="fas fa-plus"></i> New Map
+                </button>
+                <button id="nav-logout" class="nav-btn">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+        </nav>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard-content" class="dashboard-content">
+            <div class="dashboard-header">
+                <h2>My Mind Maps</h2>
+                <button id="btn-new-map" class="btn-primary">
+                    <i class="fas fa-plus"></i> Create New
+                </button>
+            </div>
+            <div id="mindmaps-grid" class="mindmaps-grid"></div>
+            <div id="empty-state" class="empty-state">
+                <i class="fas fa-folder-open"></i>
+                <p>No mind maps yet. Create your first one!</p>
+            </div>
+        </div>
+
+        <!-- Editor Content -->
+        <div id="editor-content" class="editor-content">
+            <div class="editor-header">
+                <button id="btn-back" class="btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+                <input id="map-title" type="text" class="map-title-input" placeholder="Mind Map Title">
+                <button id="btn-save" class="btn-primary">
+                    <i class="fas fa-save"></i> Save
+                </button>
+                <button id="btn-delete" class="btn-danger">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            </div>
+            <div class="editor-container">
+                <div class="editor-panel">
+                    <textarea id="markdown-editor" placeholder="Enter your mind map in Markdown format...
+
+Example:
+# Main Topic
+## Subtopic 1
+### Detail 1.1
+### Detail 1.2
+## Subtopic 2
+### Detail 2.1"></textarea>
+                </div>
+                <div class="preview-panel">
+                    <svg id="markmap-view" class="markmap"></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.15.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.15.4/dist/browser/index.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
