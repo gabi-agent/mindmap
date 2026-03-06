@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindMap - Workspace</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="container" style="padding: 20px;">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <a href="/" style="text-decoration: none;">
+                    <button class="btn btn-secondary">← Back to Dashboard</button>
+                </a>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <h1 id="mindmap-title-display" style="font-size: 24px; font-weight: 700;">Loading...</h1>
+                <button id="save-btn" class="btn btn-primary">💾 Save</button>
+            </div>
+        </header>
+    </div>
+
+    <div class="workspace-container">
+        <!-- Sidebar -->
+        <aside class="workspace-sidebar">
+            <h2 class="workspace-title">🛠️ Tools</h2>
+            
+            <div style="margin-bottom: 20px;">
+                <button id="add-node-btn" class="btn btn-primary" style="width: 100%;">
+                    ➕ Add Node
+                </button>
+            </div>
+            
+            <div class="style-panel">
+                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">🎨 Node Style</h3>
+                
+                <div class="style-row">
+                    <label class="style-label">Border Color</label>
+                    <input type="color" id="border-color" class="color-picker" value="#3b82f6">
+                </div>
+                
+                <div class="style-row">
+                    <label class="style-label">Background</label>
+                    <input type="color" id="bg-color" class="color-picker" value="#ffffff">
+                </div>
+                
+                <div class="style-row">
+                    <label class="style-label">Text Color</label>
+                    <input type="color" id="text-color" class="color-picker" value="#000000">
+                </div>
+                
+                <div class="style-row">
+                    <label class="style-label">Border Width</label>
+                    <input type="number" id="border-width" value="2" min="1" max="10" style="width: 60px;">
+                </div>
+                
+                <div class="style-row">
+                    <label class="style-label">Font Size</label>
+                    <input type="number" id="font-size" value="14" min="10" max="32" style="width: 60px;">
+                </div>
+                
+                <div class="style-row">
+                    <label class="style-label">Border Style</label>
+                    <select id="border-style" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid #e5e7eb;">
+                        <option value="solid">Solid</option>
+                        <option value="dashed">Dashed</option>
+                        <option value="dotted">Dotted</option>
+                    </select>
+                </div>
+                
+                <button id="apply-style-btn" class="btn btn-secondary" style="width: 100%; margin-top: 10px;">
+                    ✨ Apply to Selected
+                </button>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: var(--bg-light); border-radius: 8px;">
+                <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">💡 Tips</h3>
+                <ul style="font-size: 12px; color: var(--text-light); line-height: 1.6;">
+                    <li>• Click node to select</li>
+                    <li>• Drag nodes to move</li>
+                    <li>• Double-click to edit</li>
+                    <li>• Press Delete to remove</li>
+                </ul>
+            </div>
+        </aside>
+        
+        <!-- Canvas -->
+        <div class="workspace-canvas" id="canvas">
+            <div class="canvas-grid"></div>
+            <svg class="connections-svg" id="connections-svg"></svg>
+        </div>
+    </div>
+
+    <!-- Edit Node Modal -->
+    <div id="edit-node-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="modal-header">Edit Node</h2>
+            <form id="edit-node-form">
+                <div class="form-group">
+                    <label class="form-label" for="node-content">Content</label>
+                    <textarea 
+                        id="node-content" 
+                        class="form-input" 
+                        rows="4"
+                        placeholder="Enter node content"
+                        required
+                    ></textarea>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" id="cancel-edit-btn" class="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script type="module" src="/js/api.js"></script>
+    <script type="module" src="/js/workspace.js"></script>
+</body>
+</html>
