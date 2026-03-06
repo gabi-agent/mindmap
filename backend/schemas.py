@@ -1,80 +1,93 @@
-from pydantic import BaseModel, EmailStr, field_validator, Field
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, List
 from datetime import datetime
-from typing import Optional
 
-# ===== User Schemas =====
-
-class UserBase(BaseModel):
+# --- Auth Schemas ---
+class UserRegister(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     email: EmailStr
-
-class UserCreate(UserBase):
-    password: str = Field(
-        ...,
-        min_length=6,
-        max_length=72,
-        description="Password (6-72 characters)"
-    )
-
-    @field_validator('password')
-    @classmethod
-    def validate_password(cls, v):
-        if not v:
-            raise ValueError("Password cannot be empty")
-        # Bcrypt has a 72-byte limit, but we limit to 72 characters
-        # which is sufficient for most use cases
-        if len(v.encode('utf-8')) > 72:
-            raise ValueError("Password too long (max 72 bytes)")
-        return v
+    password: str = Field(..., min_length=6, max_length=100)
 
 class UserLogin(BaseModel):
     username: str
     password: str
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: int
-    is_admin: bool
-    is_active: bool
+    username: str
+    email: str
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
-# ===== Mindmap Schemas =====
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
 
-class MindmapBase(BaseModel):
-    title: str
-    content: str
+# --- MindMap Schemas ---
+class MindMapBase(BaseModel):
+    title: str = Field(..., max_length=255)
+    description: Optional[str] = None
+    is_public: bool = False
 
-class MindmapCreate(MindmapBase):
+class MindMapCreate(MindMapBase):
     pass
 
-class MindmapUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
+class MindMapUpdate(MindMapBase):
+    pass
 
-class MindmapResponse(MindmapBase):
+class MindMapResponse(MindMapBase):
     id: int
     user_id: int
     created_at: datetime
     updated_at: datetime
-    
-    class Config:
-        from_attributes = True
+    node_count: Optional[int] = 0
 
-# ===== Token Schemas =====
+class MindMapListResponse(BaseModel):
+    mindmaps: List[MindMapResponse]
+    total: int
+    page: int
+    limit: int
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
+# --- Node Schemas ---
+class NodeStyle(BaseModel):
+    border_color: Optional[str] = "#3b82f6"
+    border_width: Optional[int] = 1
+    border_style: Optional[str] = "solid"  # solid, dashed, dotted
+    background_color: Optional[str] = "#ffffff"
+    text_color: Optional[str] = "#000000"
+    font_size: Optional[int] = 14
+    font_weight: Optional[str] = "normal"  # normal, bold
+    border_radius: Optional[int] = 8
+    padding: Optional[int] = 10
 
-class TokenData(BaseModel):
-    username: Optional[str] = None
+class NodeBase(BaseModel):
+    content: str = Field(..., min_length=1)
+    x_pos: float = Field(default=0.0, ge=-10000, le=10000)
+    y_pos: float = Field(default=0.0, ge=-10000, le=10000)
+    style: Optional[NodeStyle] = None
 
-# ===== Admin Stats Schemas =====
+class NodeCreate(NodeBase):
+    parent_id: Optional[int] = None
+    mindmap_id: int  # Not in schema, comes from path
 
-class AdminStats(BaseModel):
-    total_users: int
-    total_mindmaps: int
-    active_users: int
-    admin_count: int
+class NodeUpdate(NodeBase):
+    parent_id: Optional[int] = None
+
+class NodeBatchItem(NodeUpdate):
+    id: int
+
+class NodeResponse(NodeBase):
+    id: int
+    mindmap_id: int
+    parent_id: Optional[int]
+    style_json: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+class NodeBatchUpdate(BaseModel):
+    nodes: List[NodeBatchItem]
+
+# --- Pagination Schema ---
+class PaginatedResponse(BaseModel):
+    page: int = 1
+    limit: int = 20
