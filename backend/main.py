@@ -1,244 +1,132 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
-from datetime import timedelta
-from typing import List
+from .database import engine, Base
+from . import models
+from .routers import auth, mindmaps, nodes
 import os
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from urllib.parse import urlparse
 
-from database import get_db, User, Mindmap, engine, Base
-from schemas import (
-    UserCreate, UserLogin, UserResponse, Token,
-    MindmapCreate, MindmapUpdate, MindmapResponse,
-    AdminStats
-)
-from auth import (
-    get_password_hash, authenticate_user, create_access_token,
-    get_current_active_user, get_current_admin_user,
-    ACCESS_TOKEN_EXPIRE_MINUTES
-)
+# Initialize limiter
+limiter = Limiter(key_func=get_remote_address)
 
-# Create tables
-Base.metadata.create_all(bind=engine)
-
-# Initialize FastAPI app
 app = FastAPI(
     title="MindMap API",
-    description="MindMap Application with Markmap Integration",
+    description="API for creating and managing mind maps",
     version="1.0.0"
 )
 
-# CORS middleware
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Add CORS middleware - Load allowed origins from environment variable
+CORS_ORIGINS = os.getenv(
+    "CORS_ORIGINS", 
+    "http://localhost:3000,http://127.0.0.1:3000,http://116.118.44.79:3000"
+).split(",")
+
+# Parse CORS origins to list of allowed origins
+allowed_origins_list = CORS_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
-# Mount static files for frontend
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# CSRF Protection Middleware (for API with JWT tokens in headers)
+# Note: JWT tokens in Authorization headers are naturally CSRF-resistant
+# This middleware provides additional Origin validation for POST/PUT/DELETE requests
+@app.middleware("http")
+async def csrf_protection(request: Request, call_next):
+    # Only validate Origin if the header is present
+    # This allows requests without Origin header (curl, API tools, etc.)
+    # while protecting against CSRF for browser-based requests
+    
+    if request.method in ["POST", "PUT", "DELETE"]:
+        origin = request.headers.get("Origin")
+        referer = request.headers.get("Referer")
+        
+        # Only validate Origin/Referer if they are present
+        if origin or referer:
+            # Extract base URL from Referer if Origin is missing
+            if referer and not origin:
+                parsed = urlparse(referer)
+                origin = f"{parsed.scheme}://{parsed.netloc}"
+            
+            # Validate against allowed origins
+            if origin and origin not in allowed_origins_list:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF protection: Origin not allowed"}
+                )
+    
+    # Pass request to next middleware or route handler
+    response = await call_next(request)
+    return response
 
-# Serve index.html at root
-@app.get("/app")
-async def serve_frontend():
-    return FileResponse('static/index.html')
+# Include routers (BEFORE static files to avoid route conflicts)
+app.include_router(auth.router)
+app.include_router(mindmaps.router)
+app.include_router(nodes.router)
 
-# Redirect root to app
+# Create database tables
+Base.metadata.create_all(bind=engine)
+
+# Mount static files for frontend if directory exists
+# API routes have priority over static file routes
+frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
+if os.path.exists(frontend_path):
+    # Fix: Ensure correct absolute paths for mounting
+    css_path = os.path.abspath(os.path.join(frontend_path, "css"))
+    js_path = os.path.abspath(os.path.join(frontend_path, "js"))
+    
+    if os.path.exists(css_path):
+        app.mount("/css", StaticFiles(directory=css_path), name="css")
+    if os.path.exists(js_path):
+        app.mount("/js", StaticFiles(directory=js_path), name="js")
+    
+    app.mount("/static", StaticFiles(directory=os.path.abspath(frontend_path)), name="static")
+    
+    @app.get("/")
+    def read_root():
+        from fastapi.responses import FileResponse
+        return FileResponse(os.path.join(frontend_path, "index.html"))
+    
+    @app.get("/login")
+    def read_login():
+        from fastapi.responses import FileResponse
+        return FileResponse(os.path.join(frontend_path, "login.html"))
+    
+    @app.get("/register")
+    def read_register():
+        from fastapi.responses import FileResponse
+        return FileResponse(os.path.join(frontend_path, "register.html"))
+    
+    @app.get("/workspace")
+    def read_workspace():
+        from fastapi.responses import FileResponse
+        return FileResponse(os.path.join(frontend_path, "workspace.html"))
+else:
+    @app.get("/")
+    def root():
+        return {
+            "message": "MindMap API",
+            "version": "1.0.0",
+            "docs": "/docs",
+            "health": "/health"
+        }
+
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": "mindmap-api"}
-
-# ===== Root Endpoint =====
-
-@app.get("/")
-async def root():
-    return FileResponse('static/index.html')
-
-@app.get("/api")
-async def api_root():
-    return {"message": "MindMap API v1.0", "docs": "/docs", "frontend": "/app"}
-
-# ===== Auth Routes =====
-
-@app.post("/api/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user: UserCreate, db: Session = Depends(get_db)):
-    """Register a new user"""
-    # Check if username exists
-    if db.query(User).filter(User.username == user.username).first():
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Check if email exists
-    if db.query(User).filter(User.email == user.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create new user
-    db_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=get_password_hash(user.password)
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    
-    return db_user
-
-@app.post("/api/auth/login", response_model=Token)
-async def login(user: UserLogin, db: Session = Depends(get_db)):
-    """Login and get JWT token"""
-    authenticated_user = authenticate_user(db, user.username, user.password)
-    if not authenticated_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": authenticated_user.username},
-        expires_delta=access_token_expires
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.get("/api/auth/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_active_user)):
-    """Get current user info"""
-    return current_user
-
-# ===== Mindmap Routes =====
-
-@app.get("/api/mindmaps", response_model=List[MindmapResponse])
-async def list_mindmaps(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """List all mindmaps of current user"""
-    mindmaps = db.query(Mindmap).filter(Mindmap.user_id == current_user.id).all()
-    return mindmaps
-
-@app.post("/api/mindmaps", response_model=MindmapResponse, status_code=status.HTTP_201_CREATED)
-async def create_mindmap(
-    mindmap: MindmapCreate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Create a new mindmap"""
-    db_mindmap = Mindmap(
-        title=mindmap.title,
-        content=mindmap.content,
-        user_id=current_user.id
-    )
-    db.add(db_mindmap)
-    db.commit()
-    db.refresh(db_mindmap)
-    return db_mindmap
-
-@app.get("/api/mindmaps/{mindmap_id}", response_model=MindmapResponse)
-async def get_mindmap(
-    mindmap_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Get a specific mindmap"""
-    mindmap = db.query(Mindmap).filter(
-        Mindmap.id == mindmap_id,
-        Mindmap.user_id == current_user.id
-    ).first()
-    
-    if not mindmap:
-        raise HTTPException(status_code=404, detail="Mindmap not found")
-    
-    return mindmap
-
-@app.put("/api/mindmaps/{mindmap_id}", response_model=MindmapResponse)
-async def update_mindmap(
-    mindmap_id: int,
-    mindmap_update: MindmapUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Update a mindmap"""
-    mindmap = db.query(Mindmap).filter(
-        Mindmap.id == mindmap_id,
-        Mindmap.user_id == current_user.id
-    ).first()
-    
-    if not mindmap:
-        raise HTTPException(status_code=404, detail="Mindmap not found")
-    
-    # Update fields
-    if mindmap_update.title is not None:
-        mindmap.title = mindmap_update.title
-    if mindmap_update.content is not None:
-        mindmap.content = mindmap_update.content
-    
-    db.commit()
-    db.refresh(mindmap)
-    return mindmap
-
-@app.delete("/api/mindmaps/{mindmap_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_mindmap(
-    mindmap_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Delete a mindmap"""
-    mindmap = db.query(Mindmap).filter(
-        Mindmap.id == mindmap_id,
-        Mindmap.user_id == current_user.id
-    ).first()
-    
-    if not mindmap:
-        raise HTTPException(status_code=404, detail="Mindmap not found")
-    
-    db.delete(mindmap)
-    db.commit()
-    return None
-
-# ===== Admin Routes =====
-
-@app.get("/api/admin/stats", response_model=AdminStats)
-async def get_admin_stats(
-    current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
-):
-    """Get system statistics (admin only)"""
-    total_users = db.query(User).count()
-    total_mindmaps = db.query(Mindmap).count()
-    active_users = db.query(User).filter(User.is_active == True).count()
-    admin_count = db.query(User).filter(User.is_admin == True).count()
-    
-    return AdminStats(
-        total_users=total_users,
-        total_mindmaps=total_mindmaps,
-        active_users=active_users,
-        admin_count=admin_count
-    )
-
-@app.get("/api/admin/users", response_model=List[UserResponse])
-async def list_all_users(
-    current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
-):
-    """List all users (admin only)"""
-    users = db.query(User).all()
-    return users
-
-@app.get("/api/admin/mindmaps", response_model=List[MindmapResponse])
-async def list_all_mindmaps(
-    current_user: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
-):
-    """List all mindmaps (admin only)"""
-    mindmaps = db.query(Mindmap).all()
-    return mindmaps
-
-# ===== Run Application =====
+def health():
+    return {"status": "healthy"}
 
 if __name__ == "__main__":
     import uvicorn
